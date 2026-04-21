@@ -1,4 +1,4 @@
-# 슈어엠 SMS MCP 서버 Windows 자동 설치 스크립트
+﻿# 슈어엠 SMS MCP 서버 Windows 자동 설치 스크립트
 param(
     [string]$UserCode,
     [string]$SecretKey
