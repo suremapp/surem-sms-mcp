@@ -70,14 +70,40 @@ Write-Host "[2/4] Claude Desktop 설정 파일 경로 탐색 중..." -Foreground
 $storePath     = "$env:LOCALAPPDATA\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\claude_desktop_config.json"
 $installerPath = "$env:APPDATA\Claude\claude_desktop_config.json"
 
-$storeDirExists     = Test-Path "$env:LOCALAPPDATA\Packages\Claude_pzs8sxrjxfjjc"
-$installerDirExists = Test-Path "$env:APPDATA\Claude"
+# 각종 증거 수집 (디버깅용 + 판별용)
+$evidence = [ordered]@{
+    "Store 패키지 디렉터리"       = Test-Path "$env:LOCALAPPDATA\Packages\Claude_pzs8sxrjxfjjc"
+    "Store config 디렉터리"       = Test-Path (Split-Path $storePath)
+    "Store config 파일"           = Test-Path $storePath
+    "installer 디렉터리"          = Test-Path "$env:APPDATA\Claude"
+    "installer config 파일"       = Test-Path $installerPath
+}
 
+# Appx 모듈 임포트 후 조회 (일부 PS 세션에서 미로드 상태일 수 있음)
+$appxFound = $false
+try {
+    Import-Module Appx -ErrorAction SilentlyContinue
+    $storeClaude = Get-AppxPackage -Name "*Claude*" -ErrorAction SilentlyContinue
+    if ($storeClaude) { $appxFound = $true }
+} catch { }
+$evidence["AppxPackage 감지"] = $appxFound
+
+# 실행 중인 Claude 프로세스 경로
+$claudeProc = Get-Process -Name "Claude" -ErrorAction SilentlyContinue | Select-Object -First 1
+$evidence["실행 중 Claude 경로"] = if ($claudeProc) { $claudeProc.Path } else { "(실행 중 아님)" }
+
+Write-Host "      [진단 정보]" -ForegroundColor DarkGray
+foreach ($k in $evidence.Keys) {
+    Write-Host ("        {0,-30} : {1}" -f $k, $evidence[$k]) -ForegroundColor DarkGray
+}
+
+# ===== 경로 판별 =====
+# 원칙: Store 버전의 **어떤 흔적이라도** 있으면 Store 경로를 우선.
+#       installer 경로는 Store 흔적이 전혀 없을 때만 사용.
 $configPath = $null
 $detectedBy = ""
 
-# 방법 1: 실행 중인 Claude 프로세스의 실제 경로로 판별 (가장 신뢰도 높음)
-$claudeProc = Get-Process -Name "Claude" -ErrorAction SilentlyContinue | Select-Object -First 1
+# 1. 실행 중 프로세스가 가장 정확
 if ($claudeProc -and $claudeProc.Path) {
     if ($claudeProc.Path -like "*WindowsApps*" -or $claudeProc.Path -like "*Packages*") {
         $configPath = $storePath
@@ -88,25 +114,22 @@ if ($claudeProc -and $claudeProc.Path) {
     }
 }
 
-# 방법 2: AppxPackage로 Store 버전 설치 여부 감지
+# 2. Store 흔적 하나라도 있으면 Store 경로
 if (-not $configPath) {
-    $storeClaude = Get-AppxPackage -Name "*Claude*" -ErrorAction SilentlyContinue
-    if ($storeClaude) {
+    $storeEvidence = $evidence["Store 패키지 디렉터리"] -or $evidence["Store config 디렉터리"] `
+                     -or $evidence["Store config 파일"] -or $appxFound
+    if ($storeEvidence) {
         $configPath = $storePath
-        $detectedBy = "AppxPackage (Store 버전 감지)"
+        $detectedBy = "Store 버전 흔적 존재"
     }
 }
 
-# 방법 3: Store 패키지 디렉터리 존재 여부 (Store 버전이 한 번이라도 실행된 적 있으면 존재)
-if (-not $configPath -and $storeDirExists) {
-    $configPath = $storePath
-    $detectedBy = "Store 패키지 디렉터리 존재"
-}
-
-# 방법 4: installer 디렉터리 존재
-if (-not $configPath -and $installerDirExists) {
-    $configPath = $installerPath
-    $detectedBy = "installer 디렉터리 존재"
+# 3. installer 흔적 (Store 흔적 전혀 없을 때만)
+if (-not $configPath) {
+    if ($evidence["installer 디렉터리"] -or $evidence["installer config 파일"]) {
+        $configPath = $installerPath
+        $detectedBy = "installer 버전 흔적 존재"
+    }
 }
 
 if (-not $configPath) {
@@ -115,21 +138,25 @@ if (-not $configPath) {
     exit 1
 }
 
+# Store 경로를 선택했는데 parent 디렉터리가 없으면 미리 생성
+$configDir = Split-Path $configPath
+if (-not (Test-Path $configDir)) {
+    New-Item -ItemType Directory -Path $configDir -Force | Out-Null
+    Write-Host "      config 디렉터리 생성: $configDir" -ForegroundColor DarkGray
+}
+
 Write-Host "      경로 확인: $configPath" -ForegroundColor Green
 Write-Host "      (감지 방식: $detectedBy)" -ForegroundColor DarkGray
 
-# 양쪽 경로가 모두 존재하면 stale 경로 경고
-if ($storeDirExists -and $installerDirExists) {
-    $stalePath = if ($configPath -eq $storePath) { $installerPath } else { $storePath }
-    if (Test-Path $stalePath) {
-        Write-Host ""
-        Write-Host "[!] 사용되지 않는 다른 config 경로가 존재합니다:" -ForegroundColor Yellow
-        Write-Host "    $stalePath" -ForegroundColor DarkGray
-        Write-Host "    Claude Desktop 버전이 변경된 흔적으로 보입니다. 이 파일은 무시됩니다." -ForegroundColor DarkGray
-    }
+# stale 경로 경고
+if ($configPath -eq $storePath -and $evidence["installer config 파일"]) {
+    Write-Host ""
+    Write-Host "[!] 사용되지 않는 옛 installer 경로에 config가 남아 있습니다:" -ForegroundColor Yellow
+    Write-Host "    $installerPath" -ForegroundColor DarkGray
+    Write-Host "    Store 버전으로 마이그레이션된 것으로 보입니다. 옛 파일은 무시됩니다." -ForegroundColor DarkGray
 }
 
-# Claude Desktop 실행 중이면 경고 (config 덮어쓰기 리스크)
+# Claude Desktop 실행 중이면 경고
 if ($claudeProc) {
     Write-Host ""
     Write-Host "[!] Claude Desktop이 현재 실행 중입니다." -ForegroundColor Yellow
