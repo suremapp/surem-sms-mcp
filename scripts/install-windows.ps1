@@ -4,6 +4,12 @@ param(
     [string]$SecretKey
 )
 
+# Read-Host 등 콘솔 입력을 UTF-8로 고정 (한글 계정 등 non-ASCII 입력 시 JSON 깨짐 방지)
+try {
+    [Console]::InputEncoding  = [Text.Encoding]::UTF8
+    [Console]::OutputEncoding = [Text.Encoding]::UTF8
+} catch { }
+
 # ===== 1. 인사 =====
 Write-Host ""
 Write-Host "==========================================" -ForegroundColor Cyan
@@ -88,9 +94,17 @@ try {
 } catch { }
 $evidence["AppxPackage 감지"] = $appxFound
 
-# 실행 중인 Claude 프로세스 경로
-$claudeProc = Get-Process -Name "Claude" -ErrorAction SilentlyContinue | Select-Object -First 1
-$evidence["실행 중 Claude 경로"] = if ($claudeProc) { $claudeProc.Path } else { "(실행 중 아님)" }
+# 실행 중인 Claude Desktop 프로세스 경로 탐색 (Claude Code CLI 는 제외)
+# "Claude" 이름을 공유하므로 .vscode\extensions, node_modules, claude-code 등 CLI 경로는 필터
+$claudeProc = Get-Process -Name "Claude" -ErrorAction SilentlyContinue |
+    Where-Object {
+        $_.Path -and
+        $_.Path -notlike "*\.vscode\extensions\*" -and
+        $_.Path -notlike "*\npm\*" -and
+        $_.Path -notlike "*\node_modules\*" -and
+        $_.Path -notlike "*\claude-code*"
+    } | Select-Object -First 1
+$evidence["실행 중 Claude Desktop"] = if ($claudeProc) { $claudeProc.Path } else { "(실행 중 아님)" }
 
 Write-Host "      [진단 정보]" -ForegroundColor DarkGray
 foreach ($k in $evidence.Keys) {
@@ -98,37 +112,37 @@ foreach ($k in $evidence.Keys) {
 }
 
 # ===== 경로 판별 =====
-# 원칙: Store 버전의 **어떤 흔적이라도** 있으면 Store 경로를 우선.
-#       installer 경로는 Store 흔적이 전혀 없을 때만 사용.
+# 원칙:
+#   Store 흔적(AppxPackage / 패키지 디렉터리 / config 디렉터리 / config 파일) 이
+#   하나라도 있으면 Store 경로를 우선 선택한다. installer 경로는 Store 흔적이
+#   전혀 없을 때만 사용. 실행 중 프로세스 판별은 가장 마지막 fallback.
 $configPath = $null
 $detectedBy = ""
 
-# 1. 실행 중 프로세스가 가장 정확
-if ($claudeProc -and $claudeProc.Path) {
-    if ($claudeProc.Path -like "*WindowsApps*" -or $claudeProc.Path -like "*Packages*") {
-        $configPath = $storePath
-        $detectedBy = "실행 중 Claude (Store 버전)"
-    } else {
-        $configPath = $installerPath
-        $detectedBy = "실행 중 Claude (installer 버전)"
-    }
+# 1. Store 흔적이 있으면 Store 경로 확정
+$storeEvidence = $evidence["Store 패키지 디렉터리"] -or $evidence["Store config 디렉터리"] `
+                 -or $evidence["Store config 파일"] -or $appxFound
+if ($storeEvidence) {
+    $configPath = $storePath
+    $detectedBy = "Store 버전 흔적 존재"
 }
 
-# 2. Store 흔적 하나라도 있으면 Store 경로
-if (-not $configPath) {
-    $storeEvidence = $evidence["Store 패키지 디렉터리"] -or $evidence["Store config 디렉터리"] `
-                     -or $evidence["Store config 파일"] -or $appxFound
-    if ($storeEvidence) {
-        $configPath = $storePath
-        $detectedBy = "Store 버전 흔적 존재"
-    }
-}
-
-# 3. installer 흔적 (Store 흔적 전혀 없을 때만)
+# 2. installer 흔적
 if (-not $configPath) {
     if ($evidence["installer 디렉터리"] -or $evidence["installer config 파일"]) {
         $configPath = $installerPath
         $detectedBy = "installer 버전 흔적 존재"
+    }
+}
+
+# 3. fallback: 실행 중 Claude Desktop 프로세스 경로로 판별
+if (-not $configPath -and $claudeProc -and $claudeProc.Path) {
+    if ($claudeProc.Path -like "*WindowsApps*" -or $claudeProc.Path -like "*Packages*") {
+        $configPath = $storePath
+        $detectedBy = "실행 중 Claude Desktop (Store 버전)"
+    } else {
+        $configPath = $installerPath
+        $detectedBy = "실행 중 Claude Desktop (installer 버전)"
     }
 }
 
