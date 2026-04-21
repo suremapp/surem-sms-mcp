@@ -78,10 +78,12 @@ OS에 맞는 방법을 선택하세요.
 PowerShell을 열고 아래 명령을 실행하세요.
 
 ```powershell
-irm https://raw.githubusercontent.com/suremapp/surem-sms-mcp/main/scripts/install-windows.ps1 | iex
+iex ((irm https://raw.githubusercontent.com/suremapp/surem-sms-mcp/main/scripts/install-windows.ps1).TrimStart([char]0xFEFF))
 ```
 
 스크립트가 실행되면 입력 안내 메시지와 함께 **UserCode**와 **SecretKey**를 순서대로 입력받습니다. (값을 미리 준비해두세요)
+
+> `.TrimStart([char]0xFEFF)` 부분은 스크립트 파일의 UTF-8 BOM을 제거하기 위함입니다. BOM은 파일을 로컬 실행할 때 PowerShell 5.1의 한글 파싱 오류를 막아주지만, `irm | iex`에서는 명령 앞에 붙어 실행을 방해하므로 제거해야 합니다.
 
 <details>
 <summary>로컬에 저장소를 clone해 값과 함께 실행하는 경우</summary>
