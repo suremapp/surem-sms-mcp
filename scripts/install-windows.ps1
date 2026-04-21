@@ -68,16 +68,16 @@ try {
 Write-Host "[2/4] Claude Desktop 설정 파일 경로 탐색 중..." -ForegroundColor Yellow
 
 $configPaths = @(
-    "$env:LOCALAPPDATA\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\claude_desktop_config.json",
-    "$env:APPDATA\Claude\claude_desktop_config.json"
+    "$env:APPDATA\Claude\claude_desktop_config.json",
+    "$env:LOCALAPPDATA\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\claude_desktop_config.json"
 )
 
-$configPath = $null
-foreach ($path in $configPaths) {
-    if (Test-Path (Split-Path $path)) {
-        $configPath = $path
-        break
-    }
+# 우선순위 1: 실제 config 파일이 존재하는 경로
+$configPath = $configPaths | Where-Object { Test-Path $_ } | Select-Object -First 1
+
+# 우선순위 2: 부모 디렉터리가 존재하는 경로 (Claude Desktop은 설치되었으나 config는 아직 생성되지 않은 경우)
+if (-not $configPath) {
+    $configPath = $configPaths | Where-Object { Test-Path (Split-Path $_) } | Select-Object -First 1
 }
 
 if (-not $configPath) {
@@ -87,6 +87,15 @@ if (-not $configPath) {
 }
 
 Write-Host "      경로 확인: $configPath" -ForegroundColor Green
+
+# Claude Desktop 실행 중이면 경고 (config 덮어쓰기 리스크)
+$claudeProc = Get-Process -Name "Claude" -ErrorAction SilentlyContinue
+if ($claudeProc) {
+    Write-Host ""
+    Write-Host "[!] Claude Desktop이 현재 실행 중입니다." -ForegroundColor Yellow
+    Write-Host "    설치 완료 후 반드시 완전히 종료(트레이 아이콘까지) 후 재시작하세요." -ForegroundColor Yellow
+    Write-Host ""
+}
 
 # ===== 5. 기존 설정 파일 읽기 및 병합 =====
 Write-Host "[3/4] 설정 파일 업데이트 중..." -ForegroundColor Yellow
@@ -100,27 +109,50 @@ $mcpEntry = @{
     }
 }
 
+# 기존 config 읽기 (PSCustomObject로 통일)
 if (Test-Path $configPath) {
-    # 기존 파일이 있으면 병합
-    $existing = Get-Content $configPath -Raw | ConvertFrom-Json
-    if (-not $existing.mcpServers) {
-        $existing | Add-Member -MemberType NoteProperty -Name "mcpServers" -Value @{}
-    }
-    $existing.mcpServers | Add-Member -MemberType NoteProperty -Name "surem-sms-mcp" -Value $mcpEntry -Force
-    $json = $existing | ConvertTo-Json -Depth 10
-} else {
-    # 새로 생성
-    $newConfig = @{
-        mcpServers = @{
-            "surem-sms-mcp" = $mcpEntry
+    try {
+        $content = Get-Content $configPath -Raw -ErrorAction Stop
+        if ([string]::IsNullOrWhiteSpace($content)) {
+            $existing = [PSCustomObject]@{}
+        } else {
+            $existing = $content | ConvertFrom-Json -ErrorAction Stop
         }
+    } catch {
+        Write-Host "      기존 config 파일 파싱 실패, 새로 생성합니다: $_" -ForegroundColor Yellow
+        $existing = [PSCustomObject]@{}
     }
-    $json = $newConfig | ConvertTo-Json -Depth 10
+} else {
+    $existing = [PSCustomObject]@{}
 }
+
+# mcpServers 프로퍼티가 없으면 PSCustomObject로 추가
+# (hashtable @{} 로 추가하면 Add-Member의 Note Property가 저장되지 않는 PS 5.1 버그 있음)
+$hasMcpServers = $existing.PSObject.Properties.Name -contains 'mcpServers'
+if (-not $hasMcpServers) {
+    $existing | Add-Member -MemberType NoteProperty -Name "mcpServers" -Value ([PSCustomObject]@{})
+}
+
+# surem-sms-mcp 엔트리 추가/업데이트 (다른 MCP 설정은 그대로 유지)
+$existing.mcpServers | Add-Member -MemberType NoteProperty -Name "surem-sms-mcp" -Value $mcpEntry -Force
+
+$json = $existing | ConvertTo-Json -Depth 10
 
 # Claude Desktop의 JSON 파서는 BOM을 거부하므로 BOM 없는 UTF-8로 저장
 # Out-File -Encoding utf8 은 PS 5.1에서 BOM을 추가하므로 사용하지 않음
 [System.IO.File]::WriteAllText($configPath, $json, [System.Text.UTF8Encoding]::new($false))
+
+# 저장 검증: 다시 읽어서 surem-sms-mcp 엔트리가 있는지 확인
+try {
+    $verify = Get-Content $configPath -Raw | ConvertFrom-Json -ErrorAction Stop
+    if (-not $verify.mcpServers.'surem-sms-mcp') {
+        Write-Host "      저장 검증 실패: surem-sms-mcp 엔트리가 저장되지 않았습니다." -ForegroundColor Red
+        exit 1
+    }
+} catch {
+    Write-Host "      저장 검증 실패: 파일을 다시 읽을 수 없습니다. $_" -ForegroundColor Red
+    exit 1
+}
 
 Write-Host "      설정 파일 업데이트 완료" -ForegroundColor Green
 
