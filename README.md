@@ -109,7 +109,7 @@ curl -s https://raw.githubusercontent.com/suremapp/surem-sms-mcp/main/scripts/in
 ```
 </details>
 
-#### ✏️ 수동 설치
+#### ✏️ config 직접 설정
 
 Claude Desktop의 `claude_desktop_config.json` 파일에 직접 추가합니다.
 
