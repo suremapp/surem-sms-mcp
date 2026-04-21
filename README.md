@@ -81,10 +81,10 @@ PowerShell을 열고 아래 명령을 실행하세요.
 irm https://raw.githubusercontent.com/suremapp/surem-sms-mcp/main/scripts/install-windows.ps1 | iex
 ```
 
-실행하면 `UserCode`와 `SecretKey`를 입력하라는 프롬프트가 나타납니다.
+스크립트가 실행되면 입력 안내 메시지와 함께 **UserCode**와 **SecretKey**를 순서대로 입력받습니다. (값을 미리 준비해두세요)
 
 <details>
-<summary>로컬에 저장소를 clone한 경우</summary>
+<summary>로컬에 저장소를 clone해 값과 함께 실행하는 경우</summary>
 
 ```powershell
 .\scripts\install-windows.ps1 -UserCode "슈어엠_아이디" -SecretKey "API_키"
@@ -93,11 +93,19 @@ irm https://raw.githubusercontent.com/suremapp/surem-sms-mcp/main/scripts/instal
 
 #### 🍎 Mac (자동 설치)
 
-터미널에서 아래 명령을 실행하세요.
+터미널에서 아래 명령을 실행하세요. 실행 후 **UserCode**와 **SecretKey**를 입력하라는 안내가 나타납니다.
+
+```bash
+curl -s https://raw.githubusercontent.com/suremapp/surem-sms-mcp/main/scripts/install-mac.sh | bash
+```
+
+<details>
+<summary>값을 한 줄에 함께 전달해 실행하는 경우</summary>
 
 ```bash
 curl -s https://raw.githubusercontent.com/suremapp/surem-sms-mcp/main/scripts/install-mac.sh | bash -s 슈어엠_아이디 API_키
 ```
+</details>
 
 #### ✏️ 수동 설치
 
