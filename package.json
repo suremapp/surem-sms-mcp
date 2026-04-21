@@ -1,0 +1,60 @@
+{
+  "name": "surem-sms-mcp",
+  "version": "1.0.1",
+  "description": "슈어엠 SMS MCP Server - Claude에서 자연어로 문자 발송",
+  "main": "dist/index.js",
+  "type": "module",
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
+  "bin": {
+    "surem-sms-mcp": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "ts-node src/index.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "claude",
+    "anthropic",
+    "surem",
+    "sms",
+    "lms",
+    "messaging",
+    "korea"
+  ],
+  "author": {
+    "name": "yeon",
+    "email": "suremapp@surem.com",
+    "company": "SureM Co., Ltd."
+  },
+  "license": "SEE LICENSE IN LICENSE",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/suremapp/surem-sms-mcp.git"
+  },
+  "homepage": "https://github.com/suremapp/surem-sms-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/suremapp/surem-sms-mcp/issues",
+    "email": "suremapp@surem.com"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "axios": "^1.15.1",
+    "iconv-lite": "^0.7.2",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^6.0.3"
+  }
+}
