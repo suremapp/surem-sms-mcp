@@ -107,7 +107,7 @@ if (Test-Path $configPath) {
         $existing | Add-Member -MemberType NoteProperty -Name "mcpServers" -Value @{}
     }
     $existing.mcpServers | Add-Member -MemberType NoteProperty -Name "surem-sms-mcp" -Value $mcpEntry -Force
-    $existing | ConvertTo-Json -Depth 10 | Out-File -FilePath $configPath -Encoding utf8
+    $json = $existing | ConvertTo-Json -Depth 10
 } else {
     # 새로 생성
     $newConfig = @{
@@ -115,8 +115,12 @@ if (Test-Path $configPath) {
             "surem-sms-mcp" = $mcpEntry
         }
     }
-    $newConfig | ConvertTo-Json -Depth 10 | Out-File -FilePath $configPath -Encoding utf8
+    $json = $newConfig | ConvertTo-Json -Depth 10
 }
+
+# Claude Desktop의 JSON 파서는 BOM을 거부하므로 BOM 없는 UTF-8로 저장
+# Out-File -Encoding utf8 은 PS 5.1에서 BOM을 추가하므로 사용하지 않음
+[System.IO.File]::WriteAllText($configPath, $json, [System.Text.UTF8Encoding]::new($false))
 
 Write-Host "      설정 파일 업데이트 완료" -ForegroundColor Green
 
