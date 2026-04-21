@@ -10,6 +10,30 @@ try {
     [Console]::OutputEncoding = [Text.Encoding]::UTF8
 } catch { }
 
+# PS 5.1 ConvertTo-Json 의 기본 들여쓰기가 가치-정렬 방식이라 계단식으로 깊어지는 문제를
+# 표준 2-space 들여쓰기로 재포맷 (Mac Python json.dump(indent=2) 와 동일 스타일)
+function Format-JsonIndent {
+    param(
+        [Parameter(Mandatory, ValueFromPipeline)]
+        [string]$Json,
+        [int]$Indent = 2
+    )
+    $pad   = ' ' * $Indent
+    $level = 0
+    $lines = $Json -split "`r?`n"
+    $result = foreach ($line in $lines) {
+        $trimmed = $line.TrimStart()
+        if ([string]::IsNullOrWhiteSpace($trimmed)) { continue }
+        if ($trimmed[0] -eq '}' -or $trimmed[0] -eq ']') { $level-- }
+        $normalized = $trimmed -replace ':\s{2,}', ': '
+        ($pad * $level) + $normalized
+        $trimEnd = $trimmed.TrimEnd()
+        if ($trimEnd.EndsWith(',')) { $trimEnd = $trimEnd.Substring(0, $trimEnd.Length - 1) }
+        if ($trimEnd.EndsWith('{') -or $trimEnd.EndsWith('[')) { $level++ }
+    }
+    $result -join "`n"
+}
+
 # ===== 1. 인사 =====
 Write-Host ""
 Write-Host "==========================================" -ForegroundColor Cyan
@@ -217,7 +241,7 @@ if (-not $hasMcpServers) {
 # surem-sms-mcp 엔트리 추가/업데이트 (다른 MCP 설정은 그대로 유지)
 $existing.mcpServers | Add-Member -MemberType NoteProperty -Name "surem-sms-mcp" -Value $mcpEntry -Force
 
-$json = $existing | ConvertTo-Json -Depth 10
+$json = $existing | ConvertTo-Json -Depth 10 | Format-JsonIndent -Indent 2
 
 # Claude Desktop의 JSON 파서는 BOM을 거부하므로 BOM 없는 UTF-8로 저장
 # Out-File -Encoding utf8 은 PS 5.1에서 BOM을 추가하므로 사용하지 않음
