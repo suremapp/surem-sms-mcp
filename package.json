@@ -1,6 +1,6 @@
 {
   "name": "surem-sms-mcp",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "슈어엠 SMS MCP Server - Claude에서 자연어로 문자 발송",
   "main": "dist/index.js",
   "type": "module",
@@ -49,6 +49,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "axios": "^1.15.1",
+    "form-data": "^4.0.4",
     "iconv-lite": "^0.7.2",
     "zod": "^4.3.6"
   },
